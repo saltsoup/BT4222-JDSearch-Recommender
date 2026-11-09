@@ -1,14 +1,14 @@
 # Large datasets
-*.parquet
-*.csv
-*.txt
+#*.parquet
+#*.csv
+#*.txt
 
 # Model artifacts
-*.pkl
-*.joblib
-*.pt
-*.pth
-*.ckpt
+#*.pkl
+#*.joblib
+#*.pt
+#*.pth
+#*.ckpt
 
 # Python temporary files
 __pycache__/
