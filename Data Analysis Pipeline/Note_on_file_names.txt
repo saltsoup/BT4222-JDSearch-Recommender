@@ -1,0 +1,14 @@
+The files were originally named in the following scheme, in order to permit multiple users of a single shared Colab subscription identify their own files easily. 
+
+We have renamed them and sought to align references. If you encounter any text references in the code with the original name, please use this guide to identify the files. None of the code references other notebook files, but handle input and output only through prior notebooks' output.
+
+Files	Original Name					Renamed as
+1	Siqian_Data_Preprocessing.ipynb		step_1_data_preprocessing.ipynb
+2	NingJing_features_baselineModels.ipynb	step_2_query_popularity_baseline_models.ipynb
+3	Part3_Feature_Engineering		step_3_person_match_feature_engineering.ipynb
+4	Copy of All_Features_for_LightGBM.ipynb	step_4_backup_feature_generation.ipynb
+5	Jingxuan_LightGBM_23_Features.ipynb	step_5_build_run_lightgbm_model.ipynb
+6	Test_BST_23_Features.ipynb		step_6_build_train_BST_model.ipynb
+7	Elysia_Window_Features.ipynb		step_7_build_window_eval_features.ipynb
+8	Elysia_Results_and_Experiments.ipynb	step_8_results_and_experiments.ipynb
+9	NingJing_Bias_Diagnosis.ipynb		step_9_analyse_model_bias.ipynb

@@ -73,44 +73,41 @@ Every past action is weighted by action type (click 1, follow 2, cart 3, order 5
 
 ## 5. Repository structure
 
+The current repository only contains the notebooks needed to generate intermediate files from the raw data. It also does not contain raw data. 
+
+In order to reproduce the analysis, pull this repo, then transfer: 'README.md', 'Data Analysis Pipeline/' and 'BT4222 Final' to your Colab enabled Google Drive environment, at the directory  '/content/drive/MyDrive/', i.e. the root. 
+
+In other words, transfer the **contents** of this repo **one level below** BT4222-JDSearch-Recommender/ into the **root** of your Google Drive.
+
+Then, download the raw user data, and transfer them into Raw Data. They should be named: 'product_meta_data.txt' and 'user_behavior_data.txt'
+
+Their size should be 4.51GB and 912.9MB respectively as calculated by Google Drive in the file details or file information pane.
+
+You may follow the directions to download raw user data (Per **section 6** below), or from the original authors at:
+https://github.com/rucliujn/JDsearch. Their paper is shown here: https://github.com/rucliujn/JDsearch
+
+Next, go to Data Analysis Pipeline, and run the notebooks sequentially.
+
 ```
 BT4222-JDSearch-Recommender/
 ├── README.md
-├── notebooks/                                   # listed in pipeline order; outputs kept in every notebook
-│   ├── Siqian_Data_Preprocessing.ipynb          # cleaning, split, session chunks
-│   ├── Part3_Feature_Engineering.ipynb          # feature pipeline (families A to H, context)
-│   ├── Aaron_All_Features_for_LightGBM.ipynb    # merges the features into lgbm_features_all/
-│   ├── ZhangNingJing_cleaned.ipynb              # query-match and popularity features, NMF and NCF baselines
-│   ├── Jingxuan_LightGBM_23_Features.ipynb      # feature selection and LightGBM LambdaRank
-│   ├── Test_BST_23_Features.ipynb               # BST main model (Steps 9 and 10: training predictions, feature-family experiment)
-│   ├── Elysia_Window_Features.ipynb             # features rebuilt from 7-day and 90-day history
-│   ├── Elysia_Results_and_Experiments.ipynb     # shared scoring code, results table, experiments
-│   ├── NingJing_Bias_Diagnosis.ipynb            # popularity and exposure bias by bucket
-│   └── Truman_Diagnostics_and_Insights.ipynb    # user-segment breakdowns and business insights
-├── docs/
-│   ├── feature_dictionary.csv                   # all features with family and description
-│   └── data_cleaning_summary.csv                # preprocessing counts
-└── results/
-    ├── evaluation/                              # from Elysia_Results_and_Experiments
-    │   ├── main_results_table.csv               # every model on training and test users
-    │   ├── all_results.csv
-    │   ├── window_experiment.csv                # time-window experiment
-    │   ├── family_experiment.csv                # LightGBM feature-family experiment
-    │   ├── bst_family_experiment.csv            # BST feature-family experiment
-    │   ├── bst_family_experiment_runs.csv       # one row per BST experiment run (from Test_BST_23_Features, Step 10)
-    │   └── feature_importance.csv               # LightGBM gain importance from the experiment model
-    ├── lightgbm/                                # from Jingxuan_LightGBM_23_Features
-    │   ├── tuning_results.csv                   # the three configurations compared
-    │   ├── feature_importance.csv               # gain importance of the final 23-feature model
-    │   └── comparable_validation_metrics.json   # validation NDCG@10 of the final model
-    ├── diagnostics/                             # from Truman_Diagnostics_and_Insights
-    │   ├── bst_lgbm_session_comparison.csv
-    │   ├── bst_exposure_by_popularity.csv
-    │   ├── bst_activity_breakdown.csv
-    │   ├── lgbm_activity_breakdown.csv
-    │   ├── bst_query_frequency_breakdown.csv
-    │   └── lgbm_query_frequency_breakdown.csv
-    └── bias/                                    # from NingJing_Bias_Diagnosis [Ningjing to fill in]
+├── Data Analysis Pipeline/                                 # listed in pipeline order; notebooks write outputs to drive which subsequent notebooks use.
+│   ├── step_1_data_preprocessing.ipynb                     # cleaning, split, session chunks
+│   ├── step_2_query_popularity_baseline_models.ipynb       # query-match and popularity features, NMF and NCF baselines
+│   ├── step_3_person_match_feature_engineering.ipynb       # person-match feature engineering pipeline, including likely significance tests. merges the features into lgbm_features_all/
+│   ├── step_4_backup_feature_generation.ipynb              # used as a helper notebook to re-generate the feature tables for subsequent sections from part 3, in case of resource overconsumption.
+│   ├── step_5_build_run_lightgbm_model.ipynb               # feature selection and LightGBM LambdaRank model training and prediction
+│   ├── step_6_build_train_BST_model.ipynb                  # main Behavioural Sequence Transformer model, and in Steps 9 and 10, the training predictions, feature-family experiment)
+│   ├── step_7_build_window_eval_features.ipynb             # helper notebook to rebuild features from 7-day and 90-day history to run results analysis
+│   ├── step_8_results_and_experiments.ipynb                # shared scoring code, results table, experiments
+│   └── step_9_analyse_model_bias.ipynb                     # popularity and exposure bias analysis, and proposed fixes
+│   
+└──── BT4222 Final
+    └──JDSearch
+        └──Raw Data
+            ├──product_meta_data.txt             # this is a stub file used as a placeholder for the actual dataset. Replace this with the actual dataset.
+            ├──user_behavior_data.txt            # this is a stub file used as a placeholder for the actual dataset. Replace this with the actual dataset.
+            └──README.md                         # a note on where to download the relevant raw data from its original owners.
 ```
 
 ## 6. Data and large files
@@ -119,9 +116,11 @@ The raw dataset, processed features, predictions and model artefacts are too lar
 
 https://drive.google.com/drive/folders/1MdRvvM64-AuWvqBChPhaT21KPxzOkkCj?usp=sharing (anyone with the link can view)
 
+This shared folder is what the group used to run the pipeline and contain all artefacts and findings.
+
 The shared folder is `BT4222 Final`, and the notebooks expect it mounted at `/content/drive/MyDrive/BT4222 Final/`. To rerun anything from another Google account, open the link, right-click the `BT4222 Final` folder, choose "Add shortcut to Drive" with My Drive as the location, then run `drive.mount('/content/drive')` in Colab; the paths in every notebook will resolve as written.
 
-Layout of `BT4222 Final/JDSearch/`:
+Expected final layout of `BT4222 Final/JDSearch/`:
 
 | Folder or file | Contents | Produced by |
 |---|---|---|
@@ -140,7 +139,6 @@ Layout of `BT4222 Final/JDSearch/`:
 | `model_artifacts/lightgbm_popularity_query_search/` | Query-match feature cache, tuned LightGBM models, train and test predictions | Jingxuan_LightGBM_23_Features |
 | `model_artifacts/nmf_wh.pkl`, `nmf_artifacts.pkl`, `ncf_model.pt` | Saved NMF factors and NCF weights | ZhangNingJing_cleaned |
 | `model_artifacts/4B_results/` | Results and experiment tables (copied to `results/evaluation/`) and NMF/NCF score files | Elysia_Results_and_Experiments |
-| `model_artifacts/Truman_lightGBM_diagnostics/`, `truman_additional_diagnostics/` | Segment breakdowns and comparisons (copied to `results/diagnostics/`) | Truman_Diagnostics_and_Insights |
 
 ## 7. Reproducibility
 
@@ -196,11 +194,11 @@ Experiments (validation users, models retrained on a quarter of the training ses
 
 ## 11. Team
 
-| Member | Responsibility |
-|---|---|
-| Siqian | Data cleaning, train/validation/test split, session chunks, repository setup |
+| Member | Responsibility                                                                                    |
+|---|---------------------------------------------------------------------------------------------------|
+| Siqian | Data cleaning, train/validation/test split, session chunks, repository setup                      |
 | Ningjing | Query-match and popularity features, NMF and NCF baselines, popularity and exposure bias diagnosis |
-| Aaron | History, similarity and context features, feature pipeline, BST main model |
-| Jingxuan | Feature selection and LightGBM LambdaRank |
-| Elysia | Shared scoring code, results table, time-window and feature-family experiments |
-| Truman | User-segment diagnostics and business insights |
+| Aaron | User-to-candidate match features, feature pipeline, BST main model development                    |
+| Jingxuan | Feature selection and LightGBM LambdaRank                                                         |
+| Elysia | Shared scoring code, results table, time-window and feature-family experiments                    |
+| Truman | User-segment diagnostics and business insights                                                    |

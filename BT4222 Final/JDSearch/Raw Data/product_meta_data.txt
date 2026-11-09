@@ -1,0 +1,5 @@
+This text file is a stub file representing the location of the product_meta_data.txt meant to be downloaded from the JDSearch dataset. It is included to illustrate the location of the data. 
+
+To download the data, please contact the project owners, or the authors of: https://arxiv.org/pdf/1905.06874, 
+
+One data source can be found here:https://github.com/rucliujn/JDsearch
