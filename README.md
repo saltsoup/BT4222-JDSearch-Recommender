@@ -1,211 +1,206 @@
 # BT4222-JDSearch-Recommender
-BT4222 final project: JDSearch personalised product re-ranking
 
-## 1. Project Overview
+BT4222 final project: personalised re-ranking of JD search results.
 
-This project is developed for **BT4222: Mining Web Data for Business Insights** at the National University of Singapore (AY2026/27 Semester 1).
+## 1. Project overview
 
-We aim to develop a personalized product re-ranking system using the JDSearch dataset. Given a user's current search query, historical interactions, and a list of candidate products, the model predicts product relevance and reorders candidates to prioritize products with higher expected engagement.
+This project was developed for BT4222 Mining Web Data for Business Insights at the National University of Singapore (AY2026/27 Semester 1).
 
-Our approach combines:
-- Search query and product metadata features
-- Historical user interaction and recency features
-- Product popularity and personalized preference signals
-- Machine learning-based ranking models
+Given a user's current search query, their interaction history and the list of candidate products that JD's search engine returned, the model re-orders the candidates so that the products the user is most likely to click, add to cart or buy appear first.
 
-The project investigates challenges including sparse user-item interactions, cold-item coverage, historical logging windows, and data leakage.
+The main model is a **Behaviour Sequence Transformer (BST)** that reads the user's action sequence together with 23 engineered features. A **LightGBM LambdaRank** model trained on the same 23 features serves as the white-box comparison and was used to select the features. Both are compared against Random, Popularity, NMF and NCF baselines with one shared scoring code, and two experiments test how much history the ranker needs and which feature families drive its performance.
 
 ## 2. Dataset
 
-We use the **JDSearch dataset**, containing anonymized e-commerce search sessions, product metadata, and historical user interactions.
-
-### Main data sources
+We use the [JDSearch dataset](https://github.com/rucliujn/JDsearch) of anonymised e-commerce search sessions, product metadata and historical user interactions. The raw files are not committed to this repository; see Section 6 for where the data lives.
 
 | File | Description |
 |---|---|
-| `user_behavior_data.txt` | Current queries, candidate product lists, engagement labels, and historical user interactions |
-| `product_meta_data.txt` | Product IDs, anonymized product names, brands, categories, and shop IDs |
-
-### Engagement labels
+| `user_behavior_data.txt` | Current query, candidate product list, engagement labels and the user's interaction history |
+| `product_meta_data.txt` | Product IDs, anonymised product names, brands, categories and shop IDs |
 
 | Label | Meaning |
 |---|---|
 | 0 | No recorded engagement |
 | 1 | Click |
 | 2 | Add to cart |
-| 3 | Purchase/order |
+| 3 | Purchase |
 
-## 3. Data Preprocessing
-
-The preprocessing pipeline prepares the raw JDSearch data for model training and evaluation.
-
-### Cleaning summary
+## 3. Data preprocessing
 
 | Metric | Result |
-|---|---:|
+|---|---|
 | Original sessions | 173,831 |
 | Eligible sessions | 171,175 |
 | Excluded all-negative sessions | 2,103 |
 | Excluded all-positive sessions | 553 |
-| Training sessions | 136,940 |
-| Validation sessions | 17,117 |
-| Test sessions | 17,118 |
+| Training / validation / test sessions | 136,940 / 17,117 / 17,118 |
 | Candidate-level records | 15,348,049 |
 | Candidate Parquet chunks | 86 |
-| Historical cart actions excluded from engineered features | 1,177 |
+| Historical cart actions older than 90 days, excluded from features | 1,177 |
 
-Sessions without both positive and negative candidate labels were excluded from the current ranking experiment.
+Sessions without both an engaged and a non-engaged candidate were excluded. Candidates were shuffled within each session, because the raw lists store engaged products first, and the 80/10/10 split was drawn by session with a fixed seed (42). Everything learned from labels, such as popularity, is computed from training sessions only.
 
-Candidates were shuffled within each session while preserving their product IDs and labels. A fixed random seed (`42`) was used for the 80/10/10 train-validation-test split.
+### Historical logging windows
 
-### Historical interaction windows
+Exploratory analysis showed that JD recorded each interaction type for a different length of time before the query:
 
-Exploratory analysis revealed different apparent recording windows for historical interaction types:
-
-| Time before current query | Main recorded interactions |
+| Time before current query | Interactions recorded |
 |---|---|
-| 0–7 days | Clicks, carts, orders, follows |
-| 7–90 days | Carts, orders, follows |
-| 90–365 days | Primarily orders |
+| 0 to 7 days | Clicks, carts, orders, follows |
+| 7 to 90 days | Carts, orders, follows |
+| 90 to 365 days | Orders only |
 
-Historical consecutive time intervals were reconstructed into elapsed days before the current query.
+Historical time intervals were reconstructed into elapsed days before the query. The time-window experiment (Section 8) tests what each window contributes.
 
-The 1,177 cart interactions recorded more than 90 days before the query were excluded from engineered history features, while the original raw data was preserved.
+## 4. Feature engineering
 
-## 4. Feature Engineering
+About 90 features were built, grouped into families, and 23 were selected for the final models.
 
-The project uses several feature groups.
-
-| Feature group | Description | Status |
+| Family | Description | Examples among the 23 selected |
 |---|---|---|
-| Session recency | Counts of historical actions across time windows; history length and recency | Completed |
-| Exact-product recency | Candidate-specific historical clicks, carts, orders and last interaction time | Completed |
-| Query-product matching | Overlap between search terms and product metadata | In development |
-| Popularity | Historical popularity of products, brands and categories | In development |
-| Personal preferences | Historical user affinity for brands, categories and shops | In development |
+| A. Exact product history | Whether and how recently the user interacted with this exact product | `exact_wid_last_seen_days` |
+| B. Brand, shop and category affinity | Time-decayed share of the user's history in the candidate's brand, shop and category | `brand_aff`, `cate3_aff`, `shop_share`, `shop_last_seen_days` |
+| C. Title similarity | TF-IDF similarity between the candidate title and the user's history | `title_cos_max`, `title_cos_profile` |
+| D. item2vec similarity | Embedding similarity between the candidate and the user's history | `i2v_cos_mean` |
+| E. Similarity to the last action | Whether the candidate shares brand or category with the most recent action | `last_same_brand`, `last_same_cate3`, `last_i2v_cos` |
+| F. History under the same query | Past interactions with the product under the same query | `qhist_wid_cnt` |
+| G. Popularity priors | Smoothed engagement rates among training sessions, out-of-fold | `item_ctr_train`, `cate3_ctr_train` |
+| H. Slate-relative features | The candidate relative to the other candidates in the same result list | `cate3_slate_share`, `shop_aff_slate_pct` |
+| Q. Current-query match | Whether the query mentions the candidate's name, brand or category levels | `name_query_match`, `brand_name_query_match`, `cate_name_1_query_match` to `cate_name_4_query_match`, `query_match_count` |
 
-### Key preprocessing findings
+Every past action is weighted by action type (click 1, follow 2, cart 3, order 5) and an exponential decay with a 30-day half-life. Candidate position is never used as a feature. The full list with descriptions is in `docs/feature_dictionary.csv`.
 
-- **99.53%** of sampled unique candidate IDs matched product metadata.
-- **92.94%** of sampled unique historical product IDs matched product metadata.
-- **120,235 of 15,348,049 candidate rows (0.78%)** matched a product in the same user's recorded history.
+## 5. Repository structure
 
-The low exact-product match rate motivates the use of broader product attributes and historical preference features.
-
-## 5. Repository Structure
-
-```text
+```
 BT4222-JDSearch-Recommender/
 ├── README.md
-├── notebooks/
-│   ├── 01_data_preprocessing.ipynb
-│   └── [Additional modelling notebooks]
+├── notebooks/                                   # listed in pipeline order; outputs kept in every notebook
+│   ├── Siqian_Data_Preprocessing.ipynb          # cleaning, split, session chunks
+│   ├── Part3_Feature_Engineering.ipynb          # feature pipeline (families A to H, context)
+│   ├── Aaron_All_Features_for_LightGBM.ipynb    # merges the features into lgbm_features_all/
+│   ├── ZhangNingJing_cleaned.ipynb              # query-match and popularity features, NMF and NCF baselines
+│   ├── Jingxuan_LightGBM_23_Features.ipynb      # feature selection and LightGBM LambdaRank
+│   ├── Test_BST_23_Features.ipynb               # BST main model (Steps 9 and 10: training predictions, feature-family experiment)
+│   ├── Elysia_Window_Features.ipynb             # features rebuilt from 7-day and 90-day history
+│   ├── Elysia_Results_and_Experiments.ipynb     # shared scoring code, results table, experiments
+│   ├── NingJing_Bias_Diagnosis.ipynb            # popularity and exposure bias by bucket
+│   └── Truman_Diagnostics_and_Insights.ipynb    # user-segment breakdowns and business insights
 ├── docs/
-│   ├── feature_dictionary.csv
-│   └── data_cleaning_summary.csv
-├── src/
-│   └── [Reusable scripts, if applicable]
+│   ├── feature_dictionary.csv                   # all features with family and description
+│   └── data_cleaning_summary.csv                # preprocessing counts
 └── results/
-    └── [Evaluation tables and figures]
+    ├── evaluation/                              # from Elysia_Results_and_Experiments
+    │   ├── main_results_table.csv               # every model on training and test users
+    │   ├── all_results.csv
+    │   ├── window_experiment.csv                # time-window experiment
+    │   ├── family_experiment.csv                # LightGBM feature-family experiment
+    │   ├── bst_family_experiment.csv            # BST feature-family experiment
+    │   ├── bst_family_experiment_runs.csv       # one row per BST experiment run (from Test_BST_23_Features, Step 10)
+    │   └── feature_importance.csv               # LightGBM gain importance from the experiment model
+    ├── lightgbm/                                # from Jingxuan_LightGBM_23_Features
+    │   ├── tuning_results.csv                   # the three configurations compared
+    │   ├── feature_importance.csv               # gain importance of the final 23-feature model
+    │   └── comparable_validation_metrics.json   # validation NDCG@10 of the final model
+    ├── diagnostics/                             # from Truman_Diagnostics_and_Insights
+    │   ├── bst_lgbm_session_comparison.csv
+    │   ├── bst_exposure_by_popularity.csv
+    │   ├── bst_activity_breakdown.csv
+    │   ├── lgbm_activity_breakdown.csv
+    │   ├── bst_query_frequency_breakdown.csv
+    │   └── lgbm_query_frequency_breakdown.csv
+    └── bias/                                    # from NingJing_Bias_Diagnosis [Ningjing to fill in]
 ```
 
-Large raw datasets and processed Parquet files are stored separately in Google Drive and are not committed to GitHub.
+## 6. Data and large files
 
-## 6. Processed Data Outputs
+The raw dataset, processed features, predictions and model artefacts are too large for GitHub and are kept in a shared Google Drive folder:
 
-The preprocessing notebook generates the following files under:
+https://drive.google.com/drive/folders/1MdRvvM64-AuWvqBChPhaT21KPxzOkkCj?usp=sharing (anyone with the link can view)
 
-`BT4222 Final/JDSearch/processed/`
+The shared folder is `BT4222 Final`, and the notebooks expect it mounted at `/content/drive/MyDrive/BT4222 Final/`. To rerun anything from another Google account, open the link, right-click the `BT4222 Final` folder, choose "Add shortcut to Drive" with My Drive as the location, then run `drive.mount('/content/drive')` in Colab; the paths in every notebook will resolve as written.
 
-| File / Folder | Purpose |
-|---|---|
-| `user_split.csv` | Reproducible train/validation/test assignments |
-| `candidate_chunks_shuffled/` | Candidate-level data, split into 86 Parquet chunks |
-| `session_recency_features.parquet` | Session-level historical interaction features |
-| `candidate_recency_chunks/` | Candidate-specific historical interaction features, aligned with shuffled chunks |
-| `feature_dictionary.csv` | Feature descriptions and types |
-| `data_cleaning_summary.csv` | Preprocessing counts and cleaning decisions |
+Layout of `BT4222 Final/JDSearch/`:
+
+| Folder or file | Contents | Produced by |
+|---|---|---|
+| `Raw Data/user_behavior_data.txt`, `product_meta_data.txt` | The JDSearch dataset | JDSearch |
+| `Raw Data/product_chunks/` | Product metadata split into chunks for faster loading | Part3_Feature_Engineering |
+| `processed/user_split.csv`, `data_cleaning_summary.csv`, `feature_dictionary.csv` | Train/validation/test assignment, cleaning counts, feature descriptions | Siqian_Data_Preprocessing |
+| `processed/candidate_chunks/`, `candidate_chunks_shuffled/` | Candidate-level data in 86 Parquet chunks, before and after within-session shuffling | Siqian_Data_Preprocessing |
+| `processed/session_recency_features.parquet`, `candidate_recency_chunks/` | Session-level and candidate-level recency features | Siqian_Data_Preprocessing |
+| `processed/part3_features/` | Feature-pipeline intermediates: session chunks, product tables, item2vec and term2vec vectors, training priors | Part3_Feature_Engineering |
+| `processed/lgbm_features_all/` | Full-year features for train, validation and test, group sizes, feature list and dictionary | Aaron_All_Features_for_LightGBM |
+| `processed/lgbm_features_window_7d/`, `lgbm_features_window_90d/` | The same features rebuilt from 7 and 90 days of history | Elysia_Window_Features |
+| `processed/ningjing_candidate_features_checkpoint.parquet`, `ningjing_candidate_features_with_baselines.parquet`, `ningjing_test_features_with_baselines.parquet` | Query-match and popularity features, NMF and NCF scores | ZhangNingJing_cleaned |
+| `processed/bst_literal/` | BST train and test predictions and best model weights | Test_BST_23_Features |
+| `processed/bst_experiments/` | Validation predictions and run summary of the 12 feature-family runs | Test_BST_23_Features, Step 10 |
+| `processed/bst_ranker/` | [Aaron to describe] | Test_BST_23_Features |
+| `model_artifacts/lightgbm_popularity_query_search/` | Query-match feature cache, tuned LightGBM models, train and test predictions | Jingxuan_LightGBM_23_Features |
+| `model_artifacts/nmf_wh.pkl`, `nmf_artifacts.pkl`, `ncf_model.pt` | Saved NMF factors and NCF weights | ZhangNingJing_cleaned |
+| `model_artifacts/4B_results/` | Results and experiment tables (copied to `results/evaluation/`) and NMF/NCF score files | Elysia_Results_and_Experiments |
+| `model_artifacts/Truman_lightGBM_diagnostics/`, `truman_additional_diagnostics/` | Segment breakdowns and comparisons (copied to `results/diagnostics/`) | Truman_Diagnostics_and_Insights |
 
 ## 7. Reproducibility
 
-### Environment
+The project was developed in Google Colab in Python, using pandas, NumPy, PyArrow, scikit-learn, gensim, LightGBM and PyTorch.
 
-The project is developed primarily in **Google Colab**, using Python.
+To rerun a notebook: open it in Colab, mount Google Drive with the shared folder at the path above, and run the cells in order. Notebooks reuse saved intermediates where they exist, so a rerun of a later notebook does not require rerunning the earlier ones. The feature pipeline and the BST training are the long steps; the BST notebook needs a GPU runtime, everything else runs on CPU.
 
-Main libraries include:
-- pandas
-- NumPy
-- PyArrow
-- scikit-learn
-- tqdm
+Validation rules followed throughout:
 
-Additional modelling dependencies will be documented as the project progresses.
+- Candidate position is never used as a feature, since the stored order reflects how the candidate lists were constructed.
+- Engagement labels are never inputs, and popularity features are computed from training sessions only, out-of-fold for training rows.
+- All candidates of a session stay in one split, and history features use only information available before the current query.
+- All models are scored with the same functions (Section 2 of `Elysia_Results_and_Experiments.ipynb`), with graded NDCG@10 (click 1, cart 3, purchase 7) and fixed-seed random tie-breaking.
 
-### Running the preprocessing pipeline
+## 8. Models and results
 
-1. Open `notebooks/01_data_preprocessing.ipynb` in Google Colab.
-2. Mount Google Drive.
-3. Ensure the JDSearch raw datasets are available in the expected project directory.
-4. Run the notebook cells sequentially.
-5. Verify the saved split, cleaning summary, and Parquet outputs.
-6. Use the processed outputs for feature engineering and model training.
+Test users (17,118 sessions), graded NDCG@10:
 
-The notebook expects the following directory:
+| Model | NDCG@10 | MRR | P@1 |
+|---|---|---|---|
+| Random | 0.082 | 0.099 | 0.027 |
+| Popularity (training users) | 0.255 | 0.268 | 0.158 |
+| NMF (+ popularity fallback) | 0.304 | 0.305 | 0.175 |
+| NCF (+ popularity fallback) | 0.300 | 0.298 | 0.165 |
+| **BST (main model, 23 features)** | **0.385** | **0.394** | **0.258** |
+| LightGBM LambdaRank (23 features) | 0.405 | 0.412 | 0.272 |
 
-`/content/drive/MyDrive/BT4222 Final/JDSearch/`
+Both final models beat every baseline on every metric. BST reaches 0.440 on training users against 0.385 on test, while LightGBM moves from 0.414 to 0.405, so the transformer fits the training histories more closely than it generalises. Full tables with Engagement Recall@10, Purchase Recall@10 and the cold/warm product split are in `results/evaluation/main_results_table.csv`.
 
-Users running the notebook from another Google account may need to update the data paths.
+Experiments (validation users, models retrained on a quarter of the training sessions):
 
-### Important validation precautions
-
-- Candidate position must not be used as a predictive feature.
-- Engagement labels must not be included as input features.
-- Popularity features must not incorporate held-out evaluation outcomes.
-- All candidates belonging to the same session must remain in the same split.
-- Candidate-specific feature chunks must be aligned with their corresponding candidate chunks.
-- Historical features must use only information available before the current query.
-
-## 8. Models and Evaluation
-
-The project compares simple recommendation baselines with a feature-based ranking model.
-
-Planned or existing model families include:
-- Popularity-based ranking
-- Neural Collaborative Filtering (NCF)
-- Non-negative Matrix Factorization (NMF)
-- LightGBM learning-to-rank
-
-Evaluation metrics include:
-- NDCG@10
-- Mean Reciprocal Rank (MRR)
-- Precision@1
-- Engagement Recall@K
-- Purchase Recall@K
-
-Final model configurations and verified results will be added after training and evaluation.
+- **Time window.** Rebuilding the features from 7 days, 90 days and a full year of history gives NDCG@10 of 0.390, 0.399 and 0.402. Older history helps, and most of the gain comes from days 7 to 90, where carts and orders are still recorded.
+- **Feature families.** Removing all personal-history features costs 0.057 (BST) and 0.072 (LightGBM); removing the popularity priors costs 0.030 and 0.052; every other family, including current-query match, costs 0.007 or less. The re-ranker's value comes from the user's history and from popularity rather than from matching the query, which JD's search engine has already done.
+- **Popularity bias.** Both final models recommend products with no training engagement far less often than they appear among candidates (about 51% of top-10 slots against 89.5% of candidates), and two inference-time fixes made cold-item recall worse. See `NingJing_Bias_Diagnosis.ipynb`.
 
 ## 9. Limitations
 
-- Historical interaction types have different apparent recording windows, limiting direct comparison of action frequencies across time.
-- Exact-product interaction history is sparse.
-- Some historical product IDs lack matching product metadata.
-- The current ranking experiment excludes sessions without both positive and negative candidates.
-- Offline evaluation uses the provided candidate sets and may not directly represent production search-result ranking.
+- The three logging windows mean that older history contains only some action types, so action frequencies are not comparable across windows.
+- Exact-product history is sparse: 0.78% of candidate rows match a product in the same user's history.
+- Some product IDs lack metadata, and 2,347 level-3 category values appear only in test candidates, never in training.
+- Sessions without both an engaged and a non-engaged candidate were excluded.
+- The experiments use a quarter of the training sessions and a single seed per model, so differences of 0.003 or less in NDCG@10 are not reliable.
+- Offline evaluation re-ranks the candidate lists in the log and may not reflect live search behaviour.
 
 ## 10. References
 
-- JDSearch dataset paper and official repository.
-- Additional modelling references will be added as the project progresses.
+- Liu, J. et al. *JDsearch: A Personalized Product Search Dataset with Real Queries and Full Interactions.* SIGIR 2023. Dataset repository: https://github.com/rucliujn/JDsearch
+- Chen, Q. et al. *Behavior Sequence Transformer for E-commerce Recommendation in Alibaba.* 2019.
+- He, X. et al. *Neural Collaborative Filtering.* WWW 2017.
+- Ke, G. et al. *LightGBM: A Highly Efficient Gradient Boosting Decision Tree.* NeurIPS 2017.
+- Burges, C. *From RankNet to LambdaRank to LambdaMART: An Overview.* 2010.
+- Barkan, O. and Koenigstein, N. *Item2Vec: Neural Item Embedding for Collaborative Filtering.* 2016.
 
-## 11. Team Contributions
+## 11. Team
 
-| Role | Responsibility |
+| Member | Responsibility |
 |---|---|
-| Person 1 | Data cleaning, train/validation/test split, recency features, repository setup |
-| Person 2 | Query matching and popularity features |
-| Person 3 | Personalized preference features |
-| Person 4A | LightGBM model training |
-| Person 4B | Evaluation metrics and experiments |
-| Person 5 | Diagnostics and business insights |
-
-Team member names and final contributions will be updated before submission.
+| Siqian | Data cleaning, train/validation/test split, session chunks, repository setup |
+| Ningjing | Query-match and popularity features, NMF and NCF baselines, popularity and exposure bias diagnosis |
+| Aaron | History, similarity and context features, feature pipeline, BST main model |
+| Jingxuan | Feature selection and LightGBM LambdaRank |
+| Elysia | Shared scoring code, results table, time-window and feature-family experiments |
+| Truman | User-segment diagnostics and business insights |
