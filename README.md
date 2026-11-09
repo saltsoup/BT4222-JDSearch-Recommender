@@ -67,7 +67,7 @@ About 90 features were built, grouped into families, and 23 were selected for th
 | F. History under the same query | Past interactions with the product under the same query | `qhist_wid_cnt` |
 | G. Popularity priors | Smoothed engagement rates among training sessions, out-of-fold | `item_ctr_train`, `cate3_ctr_train` |
 | H. Slate-relative features | The candidate relative to the other candidates in the same result list | `cate3_slate_share`, `shop_aff_slate_pct` |
-| Q. Current-query match | Whether the query mentions the candidate's name, brand or category levels | `name_query_match`, `brand_name_query_match`, `cate_name_1_query_match` to `cate_name_4_query_match`, `query_match_count` |
+| Q. Current-query match | Token overlap between the query and product name, plus matching indicators for brand and category levels | `name_query_match`, `brand_name_query_match`, `cate_name_1_query_match` to `cate_name_4_query_match`, `query_match_count` |
 
 Every past action is weighted by action type (click 1, follow 2, cart 3, order 5) and an exponential decay with a 30-day half-life. Candidate position is never used as a feature. The full list with descriptions is in `docs/feature_dictionary.csv`.
 
