@@ -8,7 +8,7 @@ This project was developed for BT4222 Mining Web Data for Business Insights at t
 
 Given a user's current search query, their interaction history and the list of candidate products that JD's search engine returned, the model re-orders the candidates so that the products the user is most likely to click, add to cart or buy appear first.
 
-The main model is a **Behaviour Sequence Transformer (BST)** that reads the user's action sequence together with 23 engineered features. A **LightGBM LambdaRank** model trained on the same 23 features serves as the white-box comparison and was used to select the features. Both are compared against Random, Popularity, NMF and NCF baselines with one shared scoring code, and two experiments test how much history the ranker needs and which feature families drive its performance.
+The main model is a **Behaviour Sequence Transformer (BST)** that reads the user's action sequence together with 23 engineered features. A **LightGBM LambdaRank** model trained on the same 23 features serves as a more interpretable, white-box comparison and was used to select the features. Both are compared against Random, Popularity, NMF and NCF baselines with one shared scoring code, and two experiments test how much history the ranker needs and which feature families drive its performance.
 
 ## 2. Dataset
 
@@ -166,7 +166,7 @@ Test users (17,118 sessions), graded NDCG@10:
 | **BST (main model, 23 features)** | **0.385** | **0.394** | **0.258** |
 | LightGBM LambdaRank (23 features) | 0.405 | 0.412 | 0.272 |
 
-Both final models beat every baseline on every metric. BST reaches 0.440 on training users against 0.385 on test, while LightGBM moves from 0.414 to 0.405, so the transformer fits the training histories more closely than it generalises. Full tables with Engagement Recall@10, Purchase Recall@10 and the cold/warm product split are in `results/evaluation/main_results_table.csv`.
+Both final models beat every baseline on every metric. BST reaches 0.440 on training users against 0.385 on test, while LightGBM (15 leaves, 1,165 iterations) moves from 0.414 to 0.405, so the transformer fits the training histories more closely than it generalises. Full tables with Engagement Recall@10, Purchase Recall@10 and the cold/warm product split are in `results/evaluation/main_results_table.csv`.
 
 Experiments (validation users, models retrained on a quarter of the training sessions):
 
